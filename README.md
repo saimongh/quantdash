@@ -60,3 +60,89 @@ function normalCDF(x: number): number {
   const d = 0.3989423 * Math.exp(-x * x / 2);
   // ... polynomial approximation ...
 }
+
+2. Geometric Brownian Motion (Monte Carlo)
+
+The simulator generates price paths using the stochastic differential equation:
+
+dS 
+t
+​	
+ =μS 
+t
+​	
+ dt+σS 
+t
+​	
+ dW 
+t
+​	
+ 
+Discretized for code implementation as:
+
+TypeScript
+path[i] = path[i - 1] * Math.exp((r - 0.5 * sigma^2) * dt + sigma * Math.sqrt(dt) * Z);
+Gaussian Generation: Uses the Box-Muller Transform to generate normally distributed random variables (Z) from uniform distributions for statistical accuracy.
+
+3. Value at Risk (VaR)
+
+Risk is calculated by sorting the discounted payoff vector from the Monte Carlo simulation and identifying the 5th Percentile outcome: VaR = Estimated Price - 5th Percentile Payoff
+
+✅ Testing & Verification
+Financial software requires rigorous validation. QuantDash includes a comprehensive Jest test suite to ensure algorithmic accuracy and economic consistency.
+
+Unit Tests
+
+The core math engine (utils/finance.ts) is isolated and tested against known benchmarks.
+
+Benchmark Verification: Option prices are validated against standard industry calculators to within 4 decimal places.
+
+Edge Case Handling: Deep Out-of-the-Money (OTM) options are verified to approach zero value correctly.
+
+Financial Consistency (Put-Call Parity)
+
+The system programmatically enforces the fundamental Put-Call Parity relationship in its test suite:
+
+C−P=S−K⋅e 
+−rT
+ 
+This ensures that the Call and Put pricing logic remains economically consistent with the underlying asset and risk-free rate at all times.
+
+Run the test suite:
+
+Bash
+npm test
+🚀 Getting Started Locally
+Prerequisites
+
+Node.js 18+
+
+npm or yarn
+
+Installation
+
+Clone the repository
+
+Bash
+git clone https://github.com/saimongh/quantdash.git
+cd quantdash
+Install dependencies
+
+Bash
+npm install
+Run the development server
+
+Bash
+npm run dev
+Access the dashboard Open http://localhost:3000 in your browser.
+
+👨‍💻 Author
+Saimong Hseng
+
+Portfolio
+
+LinkedIn
+
+GitHub
+
+Built at the intersection of Finance and Engineering.

@@ -54,95 +54,90 @@ QuantDash implements core quantitative finance models from scratch in pure TypeS
 ### 1. Black-Scholes Model
 To ensure performance without heavy scientific libraries (like SciPy), the application uses the **Abramowitz and Stegun** approximation for the Standard Normal Cumulative Distribution Function (CDF):
 
-```typescript
+```ts
 function normalCDF(x: number): number {
   const t = 1 / (1 + 0.2316419 * Math.abs(x));
   const d = 0.3989423 * Math.exp(-x * x / 2);
   // ... polynomial approximation ...
 }
+```
 
-2. Geometric Brownian Motion (Monte Carlo)
-
+### 2. Geometric Brownian Motion (Monte Carlo)
 The simulator generates price paths using the stochastic differential equation:
 
-dS 
-t
-​	
- =μS 
-t
-​	
- dt+σS 
-t
-​	
- dW 
-t
-​	
- 
-Discretized for code implementation as:
+$$dS_t = \mu S_t dt + \sigma S_t dW_t$$
 
-TypeScript
+Discretized for code implementation:
+
+```ts
 path[i] = path[i - 1] * Math.exp((r - 0.5 * sigma^2) * dt + sigma * Math.sqrt(dt) * Z);
-Gaussian Generation: Uses the Box-Muller Transform to generate normally distributed random variables (Z) from uniform distributions for statistical accuracy.
+```
 
-3. Value at Risk (VaR)
+* **Gaussian Generation:** Uses the **Box-Muller Transform** to generate normally distributed random variables ($Z$) from uniform distributions.
 
-Risk is calculated by sorting the discounted payoff vector from the Monte Carlo simulation and identifying the 5th Percentile outcome: VaR = Estimated Price - 5th Percentile Payoff
+### 3. Value at Risk (VaR)
+Risk is calculated by sorting the discounted payoff vector from the Monte Carlo simulation and identifying the **5th Percentile** outcome:
+`VaR = Estimated Price - 5th Percentile Payoff`
 
-✅ Testing & Verification
-Financial software requires rigorous validation. QuantDash includes a comprehensive Jest test suite to ensure algorithmic accuracy and economic consistency.
+---
 
-Unit Tests
+## ✅ Testing & Verification
 
-The core math engine (utils/finance.ts) is isolated and tested against known benchmarks.
+Financial software requires rigorous validation. QuantDash includes a comprehensive **Jest** test suite to ensure algorithmic accuracy and economic consistency.
 
-Benchmark Verification: Option prices are validated against standard industry calculators to within 4 decimal places.
+### Unit Tests
+The core math engine (`utils/finance.ts`) is isolated and tested against known benchmarks.
+* **Benchmark Verification:** Option prices are validated against standard industry calculators to within 4 decimal places.
+* **Edge Case Handling:** Deep Out-of-the-Money (OTM) options are verified to approach zero value correctly.
 
-Edge Case Handling: Deep Out-of-the-Money (OTM) options are verified to approach zero value correctly.
+### Financial Consistency (Put-Call Parity)
+The system programmatically enforces the fundamental **Put-Call Parity** relationship in its test suite:
 
-Financial Consistency (Put-Call Parity)
+$$C - P = S - K \cdot e^{-rT}$$
 
-The system programmatically enforces the fundamental Put-Call Parity relationship in its test suite:
-
-C−P=S−K⋅e 
-−rT
- 
 This ensures that the Call and Put pricing logic remains economically consistent with the underlying asset and risk-free rate at all times.
 
-Run the test suite:
-
-Bash
+**Run the test suite:**
+```bash
 npm test
-🚀 Getting Started Locally
-Prerequisites
+```
 
-Node.js 18+
+---
 
-npm or yarn
+## 🚀 Getting Started Locally
 
-Installation
+### Prerequisites
+* Node.js 18+
+* npm or yarn
 
-Clone the repository
+### Installation
 
-Bash
-git clone https://github.com/saimongh/quantdash.git
-cd quantdash
-Install dependencies
+1.  **Clone the repository**
+    ```bash
+    git clone [https://github.com/saimongh/quantdash.git](https://github.com/saimongh/quantdash.git)
+    cd quantdash
+    ```
 
-Bash
-npm install
-Run the development server
+2.  **Install dependencies**
+    ```bash
+    npm install
+    ```
 
-Bash
-npm run dev
-Access the dashboard Open http://localhost:3000 in your browser.
+3.  **Run the development server**
+    ```bash
+    npm run dev
+    ```
 
-👨‍💻 Author
-Saimong Hseng
+4.  **Access the dashboard**
+    Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-Portfolio
+---
 
-LinkedIn
+## 👨‍💻 Author
 
-GitHub
+**Saimong Hseng**
+* [Portfolio](https://saimonghseng.netlify.app/)
+* [LinkedIn](https://www.linkedin.com/in/saimong-hseng-400620201/)
+* [GitHub](https://github.com/saimongh)
 
-Built at the intersection of Finance and Engineering.
+*Built at the intersection of Finance and Engineering.*

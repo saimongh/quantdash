@@ -2,64 +2,34 @@
 
 import React, { useState, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { TrendingUp, DollarSign, Activity, Plus, Trash2, TrendingDown, BarChart3, Target } from 'lucide-react';
+import { TrendingUp, DollarSign, Activity, Plus, Trash2, TrendingDown, BarChart3, Target, Search, Loader2, AlertTriangle, Layers, Zap, CheckCircle2 } from 'lucide-react';
+import { calculateBlackScholes } from '../utils/finance';
 
 // ============================================================================
-// BLACK-SCHOLES IMPLEMENTATION
+// LOGIC ENGINES (Math & Calculations)
 // ============================================================================
 
-interface BlackScholesResult {
-  callPrice: number;
-  putPrice: number;
-  delta: number;
-  gamma: number;
-  theta: number;
-  vega: number;
-  rho: number;
+function generateGaussianRandom(): number {
+  let u1 = 0, u2 = 0;
+  while (u1 === 0) u1 = Math.random();
+  while (u2 === 0) u2 = Math.random();
+  return Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
 }
 
-function normalCDF(x: number): number {
-  const t = 1 / (1 + 0.2316419 * Math.abs(x));
-  const d = 0.3989423 * Math.exp(-x * x / 2);
-  const prob = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-  return x > 0 ? 1 - prob : prob;
+function simulateGBMPath(S0: number, r: number, sigma: number, T: number, steps: number): number[] {
+  const dt = T / steps;
+  const path = new Array(steps + 1);
+  path[0] = S0;
+
+  for (let i = 1; i <= steps; i++) {
+    const Z = generateGaussianRandom();
+    const drift = (r - 0.5 * sigma * sigma) * dt;
+    const diffusion = sigma * Math.sqrt(dt) * Z;
+    path[i] = path[i - 1] * Math.exp(drift + diffusion);
+  }
+
+  return path;
 }
-
-function normalPDF(x: number): number {
-  return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
-}
-
-function calculateBlackScholes(
-  S: number,
-  K: number,
-  T: number,
-  r: number,
-  sigma: number
-): BlackScholesResult {
-  const d1 = (Math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * Math.sqrt(T));
-  const d2 = d1 - sigma * Math.sqrt(T);
-
-  const Nd1 = normalCDF(d1);
-  const Nd2 = normalCDF(d2);
-  const Nmd1 = normalCDF(-d1);
-  const Nmd2 = normalCDF(-d2);
-  const nd1 = normalPDF(d1);
-
-  const callPrice = S * Nd1 - K * Math.exp(-r * T) * Nd2;
-  const putPrice = K * Math.exp(-r * T) * Nmd2 - S * Nmd1;
-
-  const delta = Nd1;
-  const gamma = nd1 / (S * sigma * Math.sqrt(T));
-  const theta = -(S * nd1 * sigma) / (2 * Math.sqrt(T)) - r * K * Math.exp(-r * T) * Nd2;
-  const vega = S * nd1 * Math.sqrt(T);
-  const rho = K * T * Math.exp(-r * T) * Nd2;
-
-  return { callPrice, putPrice, delta, gamma, theta: theta / 365, vega: vega / 100, rho: rho / 100 };
-}
-
-// ============================================================================
-// PORTFOLIO TYPES
-// ============================================================================
 
 interface Asset {
   id: string;
@@ -68,30 +38,313 @@ interface Asset {
   targetAllocation: number;
 }
 
-const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#06b6d4', '#6366f1', '#14b8a6'];
+
+// ============================================================================
+// STABLE UI COMPONENTS 
+// ============================================================================
+
+const GlassCard = ({ children, className = "" }: any) => (
+  <div className={`relative overflow-hidden bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-xl ${className}`}>
+    <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+    <div className="relative z-10 p-6 md:p-8">{children}</div>
+  </div>
+);
+
+const SliderInput = ({ label, value, onChange, min, max, step, unit = '' }: any) => {
+  const isPrefix = unit === '$';
+  
+  return (
+    <div className="group mb-5">
+      <div className="flex justify-between items-end mb-2">
+        <label className="text-xs uppercase tracking-widest text-white/40 font-medium">{label}</label>
+        
+        {/* Interactive Input Box */}
+        <div className="flex items-center bg-emerald-900/20 px-2 py-1 rounded border border-emerald-500/20 focus-within:border-emerald-500/50 transition-colors">
+          {isPrefix && <span className="text-emerald-500/50 font-mono text-sm mr-1">{unit}</span>}
+          <input
+            type="number"
+            value={typeof value === 'number' ? Number(value.toFixed(4)) : value}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              if (!isNaN(val)) onChange(val);
+            }}
+            step={step}
+            className="bg-transparent text-emerald-300 font-mono text-sm w-20 text-right focus:outline-none appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          />
+          {!isPrefix && unit && <span className="text-emerald-500/50 font-mono text-sm ml-1">{unit}</span>}
+        </div>
+      </div>
+      
+      <div className="relative h-6 flex items-center">
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(e) => onChange(parseFloat(e.target.value))}
+          className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-500 [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(16,185,129,0.5)] transition-all hover:[&::-webkit-slider-thumb]:scale-110"
+        />
+      </div>
+    </div>
+  );
+};
+
+const KPICard = ({ title, value, icon: Icon, type = 'neutral' }: any) => {
+  const colors = {
+    positive: 'text-emerald-400 from-emerald-500/10 to-transparent border-emerald-500/20',
+    negative: 'text-indigo-400 from-indigo-500/10 to-transparent border-indigo-500/20',
+    neutral: 'text-blue-400 from-blue-500/10 to-transparent border-blue-500/20',
+  };
+  const activeColor = type === 'positive' ? colors.positive : type === 'negative' ? colors.negative : colors.neutral;
+
+  return (
+    <div className={`relative overflow-hidden bg-gradient-to-br ${activeColor} border backdrop-blur-md rounded-2xl p-6 flex flex-col justify-between h-32 group hover:scale-[1.02] transition-transform duration-500`}>
+      <div className="flex justify-between items-start">
+        <span className="text-xs uppercase tracking-widest text-white/40 font-semibold">{title}</span>
+        <Icon className="w-5 h-5 opacity-50 group-hover:opacity-100 transition-opacity" />
+      </div>
+      <div className="text-3xl font-light tracking-tight text-white">
+        ${value.toFixed(2)}
+      </div>
+    </div>
+  );
+};
+
+const GreekCard = ({ name, value, description }: any) => (
+  <div className="bg-white/5 border border-white/5 hover:border-white/10 rounded-xl p-4 transition-colors">
+    <div className="flex justify-between items-center mb-2">
+      <span className="text-xs font-mono text-blue-300">{name}</span>
+    </div>
+    <div className="text-lg font-light text-white/90">{value.toFixed(4)}</div>
+    <div className="text-[10px] uppercase tracking-wider text-white/30 mt-1">{description}</div>
+  </div>
+);
+
+const TickerSearch = ({ ticker, setTicker, handleStockSearch, isFetchingPrice, priceError }: any) => (
+  <div className="mb-8 relative z-20">
+    <div className="flex gap-0 backdrop-blur-xl bg-white/5 border border-white/10 rounded-full p-1 pl-4 focus-within:border-emerald-500/50 transition-colors max-w-md">
+      <Search className="text-white/30 my-auto" size={16} />
+      <input
+        type="text"
+        value={ticker}
+        onChange={(e) => setTicker(e.target.value.toUpperCase())}
+        onKeyDown={(e) => e.key === 'Enter' && handleStockSearch()}
+        placeholder="ENTER TICKER (e.g. SPY)..."
+        className="w-full bg-transparent border-none text-white/80 placeholder:text-white/20 text-sm px-3 py-2 focus:outline-none focus:ring-0 font-mono tracking-wider"
+      />
+      <button
+        onClick={handleStockSearch}
+        disabled={isFetchingPrice || !ticker}
+        className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed text-xs font-bold tracking-widest uppercase"
+      >
+        {isFetchingPrice ? <Loader2 className="animate-spin" size={14} /> : 'Fetch'}
+      </button>
+    </div>
+    {priceError && <p className="text-xs text-indigo-400 mt-2 ml-4 flex items-center gap-1 font-mono">{priceError}</p>}
+  </div>
+);
+
+// ============================================================================
+// DYNAMIC BLOG SECTION
+// ============================================================================
+
+const BLOG_CONTENT = {
+    derivatives: [
+      { 
+        id: 1, 
+        title: "Implied vs. Realized Volatility: Trading the Spread", 
+        category: "Options Theory", 
+        read: "4 MIN",
+        color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/10" 
+      },
+      { 
+        id: 2, 
+        title: "Understanding Gamma Scalping in Low Vol Environments", 
+        category: "Advanced Greeks", 
+        read: "7 MIN", 
+        color: "text-indigo-400 border-indigo-500/20 bg-indigo-500/10" 
+      },
+      { 
+        id: 3, 
+        title: "The Limitations of Black-Scholes in Crypto Markets", 
+        category: "Model Risk", 
+        read: "5 MIN", 
+        color: "text-blue-400 border-blue-500/20 bg-blue-500/10" 
+      }
+    ],
+    montecarlo: [
+      { 
+        id: 1, 
+        title: "Why Geometric Brownian Motion isn't always enough", 
+        category: "Stochastic Calc", 
+        read: "6 MIN", 
+        color: "text-violet-400 border-violet-500/20 bg-violet-500/10" 
+      },
+      { 
+        id: 2, 
+        title: "Interpreting Value at Risk (VaR) with 95% Confidence", 
+        category: "Risk Metrics", 
+        read: "3 MIN", 
+        color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/10" 
+      },
+      { 
+        id: 3, 
+        title: "Convergence Rates: How many iterations do you really need?", 
+        category: "Simulation Opt", 
+        read: "5 MIN", 
+        color: "text-blue-400 border-blue-500/20 bg-blue-500/10" 
+      }
+    ],
+    allocation: [
+      { 
+        id: 1, 
+        title: "Modern Portfolio Theory: Beyond the Efficient Frontier", 
+        category: "Asset Mgmt", 
+        read: "8 MIN", 
+        color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/10" 
+      },
+      { 
+        id: 2, 
+        title: "Rebalancing Strategies: Calendar vs. Threshold", 
+        category: "Execution", 
+        read: "4 MIN", 
+        color: "text-indigo-400 border-indigo-500/20 bg-indigo-500/10" 
+      },
+      { 
+        id: 3, 
+        title: "The Role of Correlation in Downside Protection", 
+        category: "Diversification", 
+        read: "6 MIN", 
+        color: "text-violet-400 border-violet-500/20 bg-violet-500/10" 
+      }
+    ]
+  };
+  
+  // ============================================================================
+// METHODOLOGY FOOTER COMPONENT
+// ============================================================================
+
+const TAB_INFO = {
+    derivatives: {
+      title: "Methodology: Black-Scholes-Merton Model",
+      text: "This module utilizes the Black-Scholes differential equation to determine the fair price of European call and put options. By analyzing five key input variables—spot price, strike price, time to expiration, risk-free rate, and volatility—it derives theoretical option values. The engine also calculates the 'Greeks' (Delta, Gamma, Theta, Vega, Rho), offering deep insight into how sensitive the option's price is to market fluctuations."
+    },
+    montecarlo: {
+      title: "Methodology: Stochastic Simulation",
+      text: "This engine employs Geometric Brownian Motion (GBM) to simulate thousands of potential future price paths for the underlying asset. Unlike static models, this stochastic approach accounts for random market variance over time. By aggregating these iterations, the system estimates the probability of the option expiring in-the-money and calculates the Value at Risk (VaR), providing a statistical measure of potential downside exposure."
+    },
+    allocation: {
+      title: "Methodology: Strategic Rebalancing",
+      text: "This tool assists in maintaining a disciplinced investment strategy by comparing your current portfolio composition against your target asset allocation. Using a drift-based calculation, it identifies assets that are over- or under-weighted relative to your goals. The system then generates a precise Buy/Sell order schedule to restore optimal portfolio balance, minimizing drift and aligning risk exposure with your original intent."
+    }
+  };
+  
+  const InfoSection = ({ activeTab }: { activeTab: string }) => {
+    const content = TAB_INFO[activeTab as keyof typeof TAB_INFO];
+    if (!content) return null;
+  
+    return (
+      <div key={activeTab} className="mt-10 pt-6 border-t border-white/5 animate-in fade-in slide-in-from-bottom-2 duration-700">
+         <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-8 relative overflow-hidden group">
+           
+           {/* Subtle ambient glow matching the theme */}
+           <div className="absolute top-[-50%] right-[-10%] w-[300px] h-[300px] bg-gradient-to-bl from-emerald-500/5 to-transparent rounded-full blur-3xl pointer-events-none" />
+  
+           <div className="relative z-10">
+             <h3 className="flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-emerald-400 font-medium mb-4">
+               <span className="w-1 h-1 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
+               {content.title}
+             </h3>
+             <p className="text-sm font-light leading-relaxed text-white/50 max-w-4xl">
+               {content.text}
+             </p>
+           </div>
+         </div>
+      </div>
+    );
+  };
 
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
 
 export default function QuantDash() {
-  const [activeTab, setActiveTab] = useState<'derivatives' | 'allocation'>('derivatives');
+  const [activeTab, setActiveTab] = useState<'derivatives' | 'montecarlo' | 'allocation'>('derivatives');
 
-  // Options State
+  // --- HISTORICAL DATA STATE ---
+  const [ticker, setTicker] = useState('');
+  const [isFetchingPrice, setIsFetchingPrice] = useState(false);
+  const [priceError, setPriceError] = useState('');
+
+  // --- BLACK-SCHOLES STATE ---
   const [S, setS] = useState(100);
   const [K, setK] = useState(100);
   const [T, setT] = useState(1);
   const [r, setR] = useState(5);
   const [sigma, setSigma] = useState(20);
 
-  // Portfolio State
+  // --- MONTE CARLO STATE ---
+  const [mcParams, setMcParams] = useState({
+    S0: 100,
+    K: 100,
+    T: 1,
+    r: 0.05,
+    sigma: 0.2,
+    iterations: 2000,
+    steps: 50,
+    optionType: 'call' as 'call' | 'put'
+  });
+  const [mcResults, setMcResults] = useState<any>(null);
+  const [isCalculating, setIsCalculating] = useState(false);
+
+  // --- PORTFOLIO STATE ---
   const [assets, setAssets] = useState<Asset[]>([
     { id: '1', name: 'US Stocks', currentValue: 50000, targetAllocation: 40 },
     { id: '2', name: 'Bonds', currentValue: 30000, targetAllocation: 30 },
     { id: '3', name: 'International', currentValue: 20000, targetAllocation: 30 },
   ]);
 
-  // Options Calculations
+  // ============================================================================
+  // LOGIC IMPLEMENTATION
+  // ============================================================================
+  
+  const handleStockSearch = async () => {
+    if (!ticker) return;
+    setIsFetchingPrice(true);
+    setPriceError('');
+
+    try {
+      const API_KEY = 'FYYX9SDAG15X3QIM'; 
+      const response = await fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${API_KEY}`);
+      const data = await response.json();
+
+      if (data['Note'] || data['Information']) {
+        throw new Error("API Limit (Try again in 1min)");
+      }
+      
+      const priceString = data['Global Quote']?.['05. price'];
+      if (!priceString) {
+        throw new Error("Symbol not found");
+      }
+
+      const price = parseFloat(priceString);
+
+      if (activeTab === 'derivatives') {
+        setS(price);
+        setK(price); 
+      } else if (activeTab === 'montecarlo') {
+        setMcParams(prev => ({ ...prev, S0: price, K: price }));
+      }
+
+    } catch (err) {
+      setPriceError(err instanceof Error ? err.message : 'Fetch failed');
+    } finally {
+      setIsFetchingPrice(false);
+    }
+  };
+
   const result = useMemo(() => {
     return calculateBlackScholes(S, K, T, r / 100, sigma / 100);
   }, [S, K, T, r, sigma]);
@@ -113,7 +366,81 @@ export default function QuantDash() {
     return data;
   }, [S, K, T, r, sigma]);
 
-  // Portfolio Calculations
+  const runMonteCarloSimulation = () => {
+    setIsCalculating(true);
+    
+    setTimeout(() => {
+      const { S0, K, T, r, sigma, iterations, steps, optionType } = mcParams;
+      const allPaths: number[][] = [];
+      const payoffs: number[] = [];
+      let sumPayoff = 0;
+      let sumPayoffSquared = 0;
+      let inTheMoneyCount = 0;
+
+      for (let i = 0; i < iterations; i++) {
+        const path = simulateGBMPath(S0, r, sigma, T, steps);
+        allPaths.push(path);
+
+        const ST = path[path.length - 1];
+        let payoff = 0;
+
+        if (optionType === 'call') {
+          payoff = Math.max(ST - K, 0);
+        } else {
+          payoff = Math.max(K - ST, 0);
+        }
+
+        if (payoff > 0) inTheMoneyCount++;
+
+        const discountedPayoff = payoff * Math.exp(-r * T);
+        payoffs.push(discountedPayoff);
+        sumPayoff += discountedPayoff;
+        sumPayoffSquared += discountedPayoff * discountedPayoff;
+      }
+
+      const optionPrice = sumPayoff / iterations;
+      const variance = (sumPayoffSquared / iterations) - (optionPrice * optionPrice);
+      const standardError = Math.sqrt(variance / iterations);
+      const inTheMoneyProbability = (inTheMoneyCount / iterations) * 100;
+
+      payoffs.sort((a, b) => a - b);
+      const index5th = Math.floor(iterations * 0.05);
+      const payoff5th = payoffs[index5th];
+      const valueAtRisk = optionPrice - payoff5th;
+
+      const visualPaths: number[][] = [];
+      const step = Math.max(1, Math.floor(iterations / 20));
+      for (let i = 0; i < iterations; i += step) {
+        if (visualPaths.length < 20) {
+          visualPaths.push(allPaths[i]);
+        }
+      }
+
+      setMcResults({
+        optionPrice,
+        standardError,
+        inTheMoneyProbability,
+        valueAtRisk, 
+        visualPaths
+      });
+      setIsCalculating(false);
+    }, 50);
+  };
+
+  const mcChartData = useMemo(() => {
+    if (!mcResults) return [];
+    const data: any[] = [];
+    const steps = mcResults.visualPaths[0]?.length || 0;
+    for (let step = 0; step < steps; step++) {
+      const point: any = { step };
+      mcResults.visualPaths.forEach((path: number[], idx: number) => {
+        point[`path${idx}`] = path[step];
+      });
+      data.push(point);
+    }
+    return data;
+  }, [mcResults]);
+
   const calculations = useMemo(() => {
     const totalValue = assets.reduce((sum, a) => sum + (a.currentValue || 0), 0);
     const totalAllocation = assets.reduce((sum, a) => sum + (a.targetAllocation || 0), 0);
@@ -130,498 +457,340 @@ export default function QuantDash() {
       };
     });
 
-    const currentData = assets
-      .filter(a => a.currentValue > 0)
-      .map(a => ({
-        name: a.name || 'Unnamed',
-        value: a.currentValue,
-      }));
+    // Filter out HOLDs
+    const actionableItems = actions.filter(a => a.action !== 'HOLD');
 
-    const targetData = assets
-      .filter(a => a.targetAllocation > 0 && totalValue > 0)
-      .map(a => ({
-        name: a.name || 'Unnamed',
-        value: (totalValue * a.targetAllocation) / 100,
-      }));
+    const currentData = assets.filter(a => a.currentValue > 0).map(a => ({ name: a.name || 'Unnamed', value: a.currentValue }));
+    const targetData = assets.filter(a => a.targetAllocation > 0 && totalValue > 0).map(a => ({ name: a.name || 'Unnamed', value: (totalValue * a.targetAllocation) / 100 }));
 
-    return { totalValue, totalAllocation, isValid, actions, currentData, targetData };
+    return { totalValue, totalAllocation, isValid, actions, actionableItems, currentData, targetData };
   }, [assets]);
 
-  // Portfolio Functions
-  const addAsset = () => {
-    setAssets([
-      ...assets,
-      { id: Date.now().toString(), name: '', currentValue: 0, targetAllocation: 0 },
-    ]);
-  };
-
-  const removeAsset = (id: string) => {
-    setAssets(assets.filter(a => a.id !== id));
-  };
-
-  const updateAsset = (id: string, field: keyof Asset, value: string | number) => {
-    setAssets(assets.map(a => (a.id === id ? { ...a, [field]: value } : a)));
-  };
-
-  // ============================================================================
-  // SHARED COMPONENTS
-  // ============================================================================
-
-  const SliderInput = ({ label, value, onChange, min, max, step, unit = '' }: any) => (
-    <div className="space-y-2">
-      <div className="flex justify-between items-center">
-        <label className="text-sm font-medium text-slate-300">{label}</label>
-        <span className="text-sm font-bold text-emerald-400">{value}{unit}</span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-      />
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-        className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-      />
-    </div>
-  );
-
-  const KPICard = ({ title, value, icon: Icon, color }: any) => (
-    <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-2xl">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-slate-400 text-sm font-medium">{title}</span>
-        <Icon className={`w-5 h-5 ${color}`} />
-      </div>
-      <div className={`text-3xl font-bold ${color}`}>
-        ${value.toFixed(4)}
-      </div>
-    </div>
-  );
-
-  const GreekCard = ({ name, value, description }: any) => (
-    <div className="bg-slate-800/30 border border-slate-700/30 rounded-xl p-4">
-      <div className="text-xs text-slate-400 mb-1">{name}</div>
-      <div className="text-xl font-bold text-slate-200">{value.toFixed(4)}</div>
-      <div className="text-xs text-slate-500 mt-1">{description}</div>
-    </div>
-  );
+  const addAsset = () => setAssets([...assets, { id: Date.now().toString(), name: '', currentValue: 0, targetAllocation: 0 }]);
+  const removeAsset = (id: string) => setAssets(assets.filter(a => a.id !== id));
+  const updateAsset = (id: string, field: keyof Asset, value: string | number) => setAssets(assets.map(a => (a.id === id ? { ...a, [field]: value } : a)));
 
   // ============================================================================
   // RENDER
   // ============================================================================
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      {/* Header */}
-      <div className="border-b border-slate-800/50 bg-slate-900/50 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
-                QuantDash
-              </h1>
-              <p className="text-slate-400 text-sm mt-1">Quantitative Finance Toolkit</p>
-            </div>
-          </div>
+    <main className="min-h-screen bg-[#050505] text-slate-200 font-sans selection:bg-emerald-500/30 selection:text-emerald-200 relative overflow-hidden">
+      
+      {/* ATMOSPHERIC BACKGROUND */}
+      <div className="fixed inset-0 -z-10 pointer-events-none">
+        <div className="absolute top-[-20%] left-[-10%] w-[800px] h-[800px] bg-violet-900/10 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-emerald-900/10 rounded-full blur-[120px]" />
+        <div className="absolute top-[40%] left-[40%] w-[500px] h-[500px] bg-blue-900/5 rounded-full blur-[100px]" />
+        <div className="absolute inset-0 opacity-[0.03] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
+      </div>
 
-          {/* Tab Navigation */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setActiveTab('derivatives')}
-              className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
-                activeTab === 'derivatives'
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
-                  : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
-              }`}
-            >
-              <BarChart3 size={18} />
-              Derivatives Pricing
-            </button>
-            <button
-              onClick={() => setActiveTab('allocation')}
-              className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
-                activeTab === 'allocation'
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
-                  : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
-              }`}
-            >
-              <Target size={18} />
-              Portfolio Rebalancing
-            </button>
+      {/* HEADER */}
+      <nav className="border-b border-white/5 bg-[#050505]/50 backdrop-blur-xl sticky top-0 z-50">
+        <div className="max-w-[1600px] mx-auto px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+             <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-500 to-blue-500 flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                <Zap size={18} className="text-white fill-white" />
+             </div>
+             <div>
+               <h1 className="text-xl font-light tracking-tight text-white">Quant<span className="font-medium text-emerald-400">Dash</span></h1>
+               <div className="text-[10px] text-white/30 uppercase tracking-[0.2em]">Financial Modeling</div>
+             </div>
+          </div>
+          
+          <div className="flex bg-white/5 p-1 rounded-full border border-white/5">
+            {[
+              { id: 'derivatives', icon: BarChart3, label: 'Black Scholes' },
+              { id: 'montecarlo', icon: Activity, label: 'Monte Carlo' },
+              { id: 'allocation', icon: Layers, label: 'Portfolio' }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center gap-2 px-6 py-2 rounded-full text-xs font-medium tracking-wide transition-all duration-300 ${
+                  activeTab === tab.id 
+                    ? 'bg-emerald-500/10 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.1)] border border-emerald-500/20' 
+                    : 'text-white/40 hover:text-white hover:bg-white/5 border border-transparent'
+                }`}
+              >
+                <tab.icon size={14} />
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
-      </div>
+      </nav>
 
-      {/* Content */}
-      <div className="max-w-7xl mx-auto p-4 md:p-8">
+      <div className="max-w-[1600px] mx-auto p-6 md:p-10">
+        
+        {/* ======================= TAB: DERIVATIVES ======================= */}
         {activeTab === 'derivatives' && (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Input Panel */}
-            <div className="lg:col-span-1 space-y-6">
-              <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-2xl">
-                <h2 className="text-xl font-bold text-slate-200 mb-6 flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-emerald-400" />
-                  Market Parameters
-                </h2>
-                <div className="space-y-6">
-                  <SliderInput
-                    label="Underlying Price (S)"
-                    value={S}
-                    onChange={setS}
-                    min={1}
-                    max={500}
-                    step={1}
-                    unit="$"
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="lg:col-span-4">
+               <GlassCard className="h-full">
+                  <TickerSearch 
+                    ticker={ticker} 
+                    setTicker={setTicker} 
+                    handleStockSearch={handleStockSearch} 
+                    isFetchingPrice={isFetchingPrice} 
+                    priceError={priceError} 
                   />
-                  <SliderInput
-                    label="Strike Price (K)"
-                    value={K}
-                    onChange={setK}
-                    min={1}
-                    max={500}
-                    step={1}
-                    unit="$"
-                  />
-                  <SliderInput
-                    label="Time to Expiration (T)"
-                    value={T}
-                    onChange={setT}
-                    min={0.01}
-                    max={5}
-                    step={0.01}
-                    unit=" years"
-                  />
-                  <SliderInput
-                    label="Risk-Free Rate (r)"
-                    value={r}
-                    onChange={setR}
-                    min={0}
-                    max={20}
-                    step={0.1}
-                    unit="%"
-                  />
-                  <SliderInput
-                    label="Implied Volatility (σ)"
-                    value={sigma}
-                    onChange={setSigma}
-                    min={1}
-                    max={200}
-                    step={1}
-                    unit="%"
-                  />
-                </div>
-              </div>
+                  <div className="flex items-center gap-2 mb-8 border-b border-white/5 pb-4">
+                    <Activity className="w-4 h-4 text-emerald-400" />
+                    <h2 className="text-sm font-semibold tracking-widest text-white/70 uppercase">Market Parameters</h2>
+                  </div>
+                  <div className="space-y-6">
+                    <SliderInput label="Underlying Price (S)" value={S} onChange={setS} min={1} max={500} step={0.01} unit="$" />
+                    <SliderInput label="Strike Price (K)" value={K} onChange={setK} min={1} max={500} step={0.01} unit="$" />
+                    <SliderInput label="Expiration (T)" value={T} onChange={setT} min={0.01} max={5} step={0.01} unit=" yr" />
+                    <SliderInput label="Risk-Free Rate (r)" value={r} onChange={setR} min={0} max={20} step={0.1} unit="%" />
+                    <SliderInput label="Volatility (σ)" value={sigma} onChange={setSigma} min={1} max={200} step={1} unit="%" />
+                  </div>
+               </GlassCard>
             </div>
-
-            {/* Main Content */}
-            <div className="lg:col-span-3 space-y-6">
-              {/* KPI Cards */}
+            <div className="lg:col-span-8 space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <KPICard
-                  title="Call Option Price"
-                  value={result.callPrice}
-                  icon={TrendingUp}
-                  color="text-emerald-400"
-                />
-                <KPICard
-                  title="Put Option Price"
-                  value={result.putPrice}
-                  icon={DollarSign}
-                  color="text-rose-400"
-                />
+                <KPICard title="Call Option" value={result.callPrice} icon={TrendingUp} type="positive" />
+                <KPICard title="Put Option" value={result.putPrice} icon={DollarSign} type="negative" />
               </div>
-
-              {/* Chart */}
-              <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-2xl">
-                <h3 className="text-lg font-bold text-slate-200 mb-4">Option Price vs. Underlying Asset Price</h3>
-                <ResponsiveContainer width="100%" height={400}>
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis
-                      dataKey="price"
-                      stroke="#94a3b8"
-                      label={{ value: 'Stock Price ($)', position: 'insideBottom', offset: -5, fill: '#94a3b8' }}
-                    />
-                    <YAxis
-                      stroke="#94a3b8"
-                      label={{ value: 'Option Price ($)', angle: -90, position: 'insideLeft', fill: '#94a3b8' }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #475569',
-                        borderRadius: '8px',
-                        color: '#e2e8f0'
-                      }}
-                    />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="call"
-                      stroke="#10b981"
-                      strokeWidth={3}
-                      dot={false}
-                      name="Call Price"
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="put"
-                      stroke="#f43f5e"
-                      strokeWidth={3}
-                      dot={false}
-                      name="Put Price"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Greeks */}
-              <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-2xl">
-                <h3 className="text-lg font-bold text-slate-200 mb-4">The Greeks (Call Option)</h3>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <GlassCard>
+                <div className="flex justify-between items-center mb-6">
+                   <h3 className="text-lg font-light text-white/90">Option vs Underlying</h3>
+                   <div className="flex gap-4 text-xs">
+                      <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-400"></div><span className="text-white/50">Call</span></div>
+                      <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-indigo-400"></div><span className="text-white/50">Put</span></div>
+                   </div>
+                </div>
+                <div className="h-[350px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                      <XAxis dataKey="price" stroke="rgba(255,255,255,0.2)" tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} tickLine={false} axisLine={false} />
+                      <YAxis stroke="rgba(255,255,255,0.2)" tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} tickLine={false} axisLine={false} tickFormatter={(val) => `$${val}`} />
+                      <Tooltip contentStyle={{ backgroundColor: 'rgba(5,5,5,0.8)', borderColor: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', color: '#fff' }} itemStyle={{ fontSize: '12px' }} labelStyle={{ color: '#fff', marginBottom: '5px' }} />
+                      <Line type="monotone" dataKey="call" stroke="#34d399" strokeWidth={2} dot={false} activeDot={{ r: 6, fill: "#34d399" }} />
+                      <Line type="monotone" dataKey="put" stroke="#818cf8" strokeWidth={2} dot={false} activeDot={{ r: 6, fill: "#818cf8" }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </GlassCard>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <GreekCard name="Delta (Δ)" value={result.delta} description="Price sensitivity" />
-                  <GreekCard name="Gamma (Γ)" value={result.gamma} description="Delta change" />
-                  <GreekCard name="Theta (Θ)" value={result.theta} description="Time decay/day" />
+                  <GreekCard name="Gamma (Γ)" value={result.gamma} description="Rate of Delta" />
+                  <GreekCard name="Theta (Θ)" value={result.theta} description="Time decay" />
                   <GreekCard name="Vega (ν)" value={result.vega} description="Vol sensitivity" />
                   <GreekCard name="Rho (ρ)" value={result.rho} description="Rate sensitivity" />
-                </div>
               </div>
             </div>
           </div>
         )}
 
-        {activeTab === 'allocation' && (
-          <div className="space-y-6">
-            {/* Asset Input Section */}
-            <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-2xl">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-semibold text-slate-200">Your Assets</h2>
-                <button
-                  onClick={addAsset}
-                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg transition-colors"
-                >
-                  <Plus size={20} />
-                  Add Asset
-                </button>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b-2 border-slate-700">
-                      <th className="text-left py-3 px-4 text-slate-300 font-semibold">Asset Name</th>
-                      <th className="text-left py-3 px-4 text-slate-300 font-semibold">Current Value</th>
-                      <th className="text-left py-3 px-4 text-slate-300 font-semibold">Target Allocation (%)</th>
-                      <th className="w-16"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {assets.map((asset) => (
-                      <tr key={asset.id} className="border-b border-slate-700/50 hover:bg-slate-800/30">
-                        <td className="py-3 px-4">
-                          <input
-                            type="text"
-                            value={asset.name}
-                            onChange={e => updateAsset(asset.id, 'name', e.target.value)}
-                            placeholder="e.g., US Stocks"
-                            className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                          />
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="relative">
-                            <span className="absolute left-3 top-2.5 text-slate-400">$</span>
-                            <input
-                              type="number"
-                              value={asset.currentValue || ''}
-                              onChange={e => updateAsset(asset.id, 'currentValue', parseFloat(e.target.value) || 0)}
-                              placeholder="0"
-                              className="w-full pl-8 pr-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                            />
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="relative">
-                            <input
-                              type="number"
-                              value={asset.targetAllocation || ''}
-                              onChange={e => updateAsset(asset.id, 'targetAllocation', parseFloat(e.target.value) || 0)}
-                              placeholder="0"
-                              className="w-full pr-8 pl-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                            />
-                            <span className="absolute right-3 top-2.5 text-slate-400">%</span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4">
-                          <button
-                            onClick={() => removeAsset(asset.id)}
-                            className="text-rose-400 hover:text-rose-300 p-2 hover:bg-rose-900/20 rounded-lg transition-colors"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Validation Message */}
-              <div className="mt-4">
-                {!calculations.isValid && calculations.totalAllocation > 0 && (
-                  <div className="bg-rose-900/20 border border-rose-500/50 rounded-lg p-4 flex items-center gap-2">
-                    <div className="text-rose-400 font-semibold">⚠ Target allocations must sum to 100%</div>
-                    <div className="text-rose-300 ml-auto">
-                      Current: {calculations.totalAllocation.toFixed(1)}%
-                    </div>
-                  </div>
-                )}
-                {calculations.isValid && (
-                  <div className="bg-emerald-900/20 border border-emerald-500/50 rounded-lg p-4 flex items-center gap-2">
-                    <div className="text-emerald-400 font-semibold">✓ Portfolio allocation is valid</div>
-                    <div className="text-emerald-300 ml-auto">
-                      Total Value: ${calculations.totalValue.toLocaleString()}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Split View: Charts + Action Plan */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Charts Section */}
-              <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-2xl">
-                <h2 className="text-2xl font-semibold text-slate-200 mb-6">Allocation Overview</h2>
-                
-                <div className="space-y-8">
-                  {/* Current Allocation */}
-                  <div>
-                    <h3 className="text-lg font-medium text-slate-300 mb-4 text-center">Current Allocation</h3>
-                    <ResponsiveContainer width="100%" height={250}>
-                      <PieChart>
-                        <Pie
-                          data={calculations.currentData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={90}
-                          paddingAngle={2}
-                          dataKey="value"
-                        >
-                          {calculations.currentData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          formatter={(value: number) => `$${value.toLocaleString()}`}
-                          contentStyle={{
-                            backgroundColor: '#1e293b',
-                            border: '1px solid #475569',
-                            borderRadius: '8px',
-                            color: '#e2e8f0'
-                          }}
-                        />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Target Allocation */}
-                  <div>
-                    <h3 className="text-lg font-medium text-slate-300 mb-4 text-center">Target Allocation</h3>
-                    <ResponsiveContainer width="100%" height={250}>
-                      <PieChart>
-                        <Pie
-                          data={calculations.targetData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={90}
-                          paddingAngle={2}
-                          dataKey="value"
-                        >
-                          {calculations.targetData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          formatter={(value: number) => `$${value.toLocaleString()}`}
-                          contentStyle={{
-                            backgroundColor: '#1e293b',
-                            border: '1px solid #475569',
-                            borderRadius: '8px',
-                            color: '#e2e8f0'
-                          }}
-                        />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
+        {/* ======================= TAB: MONTE CARLO ======================= */}
+        {activeTab === 'montecarlo' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="lg:col-span-4">
+              <GlassCard className="h-full">
+                <TickerSearch 
+                  ticker={ticker} 
+                  setTicker={setTicker} 
+                  handleStockSearch={handleStockSearch} 
+                  isFetchingPrice={isFetchingPrice} 
+                  priceError={priceError} 
+                />
+                <div className="flex items-center gap-2 mb-8 border-b border-white/5 pb-4">
+                    <Activity className="w-4 h-4 text-emerald-400" />
+                    <h2 className="text-sm font-semibold tracking-widest text-white/70 uppercase">Simulation Config</h2>
+                </div>
+                <div className="mb-8">
+                  <label className="text-xs uppercase tracking-widest text-white/40 font-medium mb-3 block">Option Type</label>
+                  <div className="grid grid-cols-2 gap-2 bg-black/20 p-1 rounded-xl">
+                    <button onClick={() => setMcParams({ ...mcParams, optionType: 'call' })} className={`py-2 rounded-lg text-xs font-medium transition-all ${mcParams.optionType === 'call' ? 'bg-emerald-500/20 text-emerald-300 shadow-inner' : 'text-white/30 hover:text-white'}`}>CALL</button>
+                    <button onClick={() => setMcParams({ ...mcParams, optionType: 'put' })} className={`py-2 rounded-lg text-xs font-medium transition-all ${mcParams.optionType === 'put' ? 'bg-indigo-500/20 text-indigo-300 shadow-inner' : 'text-white/30 hover:text-white'}`}>PUT</button>
                   </div>
                 </div>
-              </div>
+                <div className="space-y-6">
+                  <SliderInput label="Spot Price (S₀)" value={mcParams.S0} onChange={(v: number) => setMcParams({ ...mcParams, S0: v })} min={1} max={500} step={0.01} unit="$" />
+                  <SliderInput label="Strike Price (K)" value={mcParams.K} onChange={(v: number) => setMcParams({ ...mcParams, K: v })} min={1} max={500} step={0.01} unit="$" />
+                  <SliderInput label="Iterations" value={mcParams.iterations} onChange={(v: number) => setMcParams({ ...mcParams, iterations: Math.round(v) })} min={1000} max={10000} step={500} />
+                  <SliderInput label="Time Steps" value={mcParams.steps} onChange={(v: number) => setMcParams({ ...mcParams, steps: Math.round(v) })} min={10} max={200} step={10} />
+                </div>
+                <button onClick={runMonteCarloSimulation} disabled={isCalculating} className="w-full mt-8 bg-gradient-to-r from-emerald-600 to-emerald-400 hover:to-emerald-300 text-black font-bold py-4 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all hover:scale-[1.02] disabled:opacity-50 disabled:scale-100">{isCalculating ? <Loader2 className="animate-spin mx-auto" /> : 'RUN SIMULATION'}</button>
+              </GlassCard>
+            </div>
+            <div className="lg:col-span-8 space-y-6">
+               {mcResults && (
+                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-emerald-500/5 border border-emerald-500/10 p-5 rounded-2xl backdrop-blur-md">
+                       <div className="text-[10px] uppercase text-emerald-300/50 mb-1">Estimated Price</div>
+                       <div className="text-2xl font-light text-emerald-300">${mcResults.optionPrice.toFixed(4)}</div>
+                    </div>
+                    <div className="bg-blue-500/5 border border-blue-500/10 p-5 rounded-2xl backdrop-blur-md">
+                       <div className="text-[10px] uppercase text-blue-300/50 mb-1">Std Error</div>
+                       <div className="text-2xl font-light text-blue-300">±{mcResults.standardError.toFixed(4)}</div>
+                    </div>
+                    <div className="bg-violet-500/5 border border-violet-500/10 p-5 rounded-2xl backdrop-blur-md">
+                       <div className="text-[10px] uppercase text-violet-300/50 mb-1">ITM Prob</div>
+                       <div className="text-2xl font-light text-violet-300">{mcResults.inTheMoneyProbability.toFixed(1)}%</div>
+                    </div>
+                    <div className="bg-indigo-500/10 border border-indigo-500/20 p-5 rounded-2xl backdrop-blur-md relative overflow-hidden group">
+                       <div className="absolute right-0 top-0 p-3 opacity-20"><AlertTriangle className="text-indigo-400" /></div>
+                       <div className="text-[10px] uppercase text-indigo-300/50 mb-1">95% VaR</div>
+                       <div className="text-2xl font-light text-indigo-300">${mcResults.valueAtRisk.toFixed(4)}</div>
+                    </div>
+                 </div>
+               )}
+               <GlassCard className="min-h-[400px]">
+                  <h3 className="text-lg font-light text-white/90 mb-6">Monte Carlo Paths</h3>
+                  {!mcResults ? (
+                    <div className="h-[300px] flex flex-col items-center justify-center border border-dashed border-white/10 rounded-2xl bg-black/20">
+                      <Activity className="text-white/10 mb-4 w-12 h-12" />
+                      <p className="text-white/30 text-sm font-mono">AWAITING SIMULATION DATA</p>
+                    </div>
+                  ) : (
+                    <div className="h-[350px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={mcChartData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                          <XAxis dataKey="step" hide />
+                          <YAxis stroke="rgba(255,255,255,0.2)" tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
+                          <Tooltip contentStyle={{ backgroundColor: '#000', border: '1px solid #333' }} />
+                          {mcResults.visualPaths.map((_: any, idx: number) => (
+                            <Line key={idx} type="natural" dataKey={`path${idx}`} stroke={`hsl(${140 + idx * 10}, 60%, ${50 + (idx % 2) * 10}%)`} strokeWidth={1} dot={false} strokeOpacity={0.3} />
+                          ))}
+                          <Line type="monotone" dataKey={() => mcParams.K} stroke="#818cf8" strokeWidth={1} strokeDasharray="5 5" dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+               </GlassCard>
+            </div>
+          </div>
+        )}
 
-              {/* Action Plan */}
-              <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-2xl">
-                <h2 className="text-2xl font-semibold text-slate-200 mb-6">Action Plan</h2>
-                
-                {calculations.isValid ? (
-                  <div className="space-y-3">
-                    {calculations.actions.map((action) => (
-                      <div
-                        key={action.id}
-                        className={`p-4 rounded-lg border-2 ${
-                          action.action === 'BUY'
-                            ? 'bg-emerald-900/20 border-emerald-500/50'
-                            : action.action === 'SELL'
-                            ? 'bg-rose-900/20 border-rose-500/50'
-                            : 'bg-slate-800/30 border-slate-700/30'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            {action.action === 'BUY' && <TrendingUp className="text-emerald-400" size={24} />}
-                            {action.action === 'SELL' && <TrendingDown className="text-rose-400" size={24} />}
-                            <div>
-                              <div className="font-semibold text-slate-200">{action.name || 'Unnamed'}</div>
-                              <div className="text-sm text-slate-400">
-                                Current: ${action.currentValue.toLocaleString()} → Target: ${action.targetValue.toLocaleString()}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div
-                              className={`text-xl font-bold ${
-                                action.action === 'BUY'
-                                  ? 'text-emerald-400'
-                                  : action.action === 'SELL'
-                                  ? 'text-rose-400'
-                                  : 'text-slate-400'
-                              }`}
-                            >
-                              {action.action}
-                            </div>
-                            <div className="text-lg font-semibold text-slate-200">
+        {/* ======================= TAB: PORTFOLIO ======================= */}
+        {activeTab === 'allocation' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+             <div className="lg:col-span-12">
+               <GlassCard>
+                 <div className="flex justify-between items-center mb-8">
+                   <h2 className="text-xl font-light text-white">Asset Allocation</h2>
+                   <button onClick={addAsset} className="flex items-center gap-2 bg-white/5 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 px-4 py-2 rounded-full text-xs uppercase tracking-wider transition-all">
+                     <Plus size={16} /> Add Asset
+                   </button>
+                 </div>
+                 <div className="overflow-hidden rounded-2xl border border-white/5">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-white/5 text-xs uppercase tracking-widest text-white/40">
+                          <th className="p-4 font-medium">Asset</th>
+                          <th className="p-4 font-medium">Value</th>
+                          <th className="p-4 font-medium">Target %</th>
+                          <th className="p-4"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {assets.map((asset) => (
+                          <tr key={asset.id} className="hover:bg-white/5 transition-colors group">
+                            <td className="p-4"><input type="text" value={asset.name} onChange={e => updateAsset(asset.id, 'name', e.target.value)} className="bg-transparent text-white focus:outline-none focus:text-emerald-400 font-medium" /></td>
+                            <td className="p-4"><div className="flex items-center text-white/70"><span className="mr-1 text-white/30">$</span><input type="number" value={asset.currentValue || ''} onChange={e => updateAsset(asset.id, 'currentValue', parseFloat(e.target.value) || 0)} className="bg-transparent focus:outline-none font-mono" /></div></td>
+                            <td className="p-4"><div className="flex items-center text-white/70"><input type="number" value={asset.targetAllocation || ''} onChange={e => updateAsset(asset.id, 'targetAllocation', parseFloat(e.target.value) || 0)} className="bg-transparent focus:outline-none font-mono w-16" /><span className="ml-1 text-white/30">%</span></div></td>
+                            <td className="p-4 text-right"><button onClick={() => removeAsset(asset.id)} className="text-white/20 hover:text-indigo-400 transition-colors"><Trash2 size={16} /></button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                 </div>
+                 <div className="mt-6 flex justify-end">
+                    {calculations.isValid ? (
+                      <div className="flex items-center gap-2 text-emerald-400 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20 text-xs">
+                        <Zap size={14} /> Allocation Valid (${calculations.totalValue.toLocaleString()})
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-indigo-400 bg-indigo-500/10 px-4 py-2 rounded-full border border-indigo-500/20 text-xs">
+                         <AlertTriangle size={14} /> Target must sum to 100% (Current: {calculations.totalAllocation.toFixed(1)}%)
+                      </div>
+                    )}
+                 </div>
+               </GlassCard>
+             </div>
+
+             <div className="lg:col-span-8">
+                <GlassCard>
+                  <h3 className="text-sm uppercase tracking-widest text-white/40 mb-6">Allocation Balance</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* WHEEL 1: CURRENT */}
+                    <div className="flex flex-col items-center">
+                        <span className="text-xs text-white/30 mb-4 tracking-widest uppercase">Current Distribution</span>
+                        <div className="h-[200px] w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie data={calculations.currentData} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value" stroke="none">
+                                  {calculations.currentData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
+                              </Pie>
+                              <Tooltip contentStyle={{ backgroundColor: '#000', borderRadius: '10px', border: '1px solid #333' }} itemStyle={{ color: '#fff' }} formatter={(val) => `$${val.toLocaleString()}`} />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* WHEEL 2: TARGET */}
+                    <div className="flex flex-col items-center">
+                        <span className="text-xs text-white/30 mb-4 tracking-widest uppercase">Target Distribution</span>
+                        <div className="h-[200px] w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie data={calculations.targetData} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value" stroke="none">
+                                  {calculations.targetData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
+                              </Pie>
+                              <Tooltip contentStyle={{ backgroundColor: '#000', borderRadius: '10px', border: '1px solid #333' }} itemStyle={{ color: '#fff' }} formatter={(val) => `$${val.toLocaleString()}`} />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                    </div>
+                  </div>
+                </GlassCard>
+             </div>
+
+             <div className="lg:col-span-4">
+               <GlassCard className="h-full">
+                 <h3 className="text-sm uppercase tracking-widest text-white/40 mb-6">Rebalancing Actions</h3>
+                 <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar">
+                   {calculations.actionableItems.length === 0 ? (
+                     <div className="flex flex-col items-center justify-center h-[200px] text-center">
+                        <CheckCircle2 className="w-12 h-12 text-emerald-500/20 mb-4" />
+                        <p className="text-white/40 text-sm">Portfolio Perfectly Balanced</p>
+                        <p className="text-white/20 text-xs mt-1">No actions required.</p>
+                     </div>
+                   ) : (
+                     calculations.actionableItems.map((action) => (
+                       <div key={action.id} className={`p-4 rounded-xl border flex justify-between items-center ${
+                         action.action === 'BUY' ? 'bg-emerald-500/5 border-emerald-500/20' : 
+                         'bg-indigo-500/5 border-indigo-500/20'
+                       }`}>
+                         <div className="flex items-center gap-3">
+                           {action.action === 'BUY' ? <TrendingUp className="text-emerald-400" size={18} /> : <TrendingDown className="text-indigo-400" size={18} />}
+                           <div>
+                             <div className="text-sm font-medium text-white">{action.name}</div>
+                             <div className="text-[10px] text-white/40 uppercase tracking-wider">{action.action} ORDER</div>
+                           </div>
+                         </div>
+                         <div className="text-right">
+                            <div className={`font-mono ${action.action === 'BUY' ? 'text-emerald-400' : 'text-indigo-400'}`}>
                               ${Math.abs(action.delta).toLocaleString()}
                             </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center text-slate-400 py-12">
-                    <p className="text-lg">Please ensure target allocations sum to 100% to see your action plan.</p>
-                  </div>
-                )}
-              </div>
-            </div>
+                         </div>
+                       </div>
+                     ))
+                   )}
+                 </div>
+               </GlassCard>
+             </div>
           </div>
-        )}
+              )}
+              
+              <InfoSection activeTab={activeTab} />
+
       </div>
-    </div>
+    </main>
   );
 }

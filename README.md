@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# QuantDash 📈
 
-## Getting Started
+![Next.js](https://img.shields.io/badge/Next.js-14-black?style=flat&logo=next.js)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=flat&logo=typescript)
+![Tailwind](https://img.shields.io/badge/Tailwind_CSS-3.0-38B2AC?style=flat&logo=tailwind-css)
+![Recharts](https://img.shields.io/badge/Viz-Recharts-red)
 
-First, run the development server:
+**QuantDash** is a high-performance financial engineering dashboard engineered for real-time derivatives pricing, stochastic simulation, and portfolio optimization.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+It bridges the gap between sophisticated financial modeling and modern front-end architecture, running complex quantitative models—including **Monte Carlo simulations** and **Black-Scholes pricing**—entirely client-side for zero-latency analysis.
+
+🔗 **Live Demo:** [https://quantdash-nine.vercel.app/](https://quantdash-nine.vercel.app/)
+
+---
+
+## ⚡ Key Features
+
+### 1. Derivatives Pricing Engine (Black-Scholes)
+
+- **Real-Time Greek Analysis:** Calculates first and second-order Greeks ($\Delta$, $\Gamma$, $\Theta$, $\nu$, $\rho$) instantly as market parameters change.
+- **Dynamic P&L Visualization:** Renders interactive payoff curves across a range of underlying asset prices.
+- **Implied Volatility Surface:** Allows users to adjust IV and Risk-Free Rate ($r$) to model different market regimes.
+
+### 2. Monte Carlo Option Simulator
+
+- **Stochastic Modeling:** Simulates thousands of price paths using **Geometric Brownian Motion (GBM)** to estimate option fair value.
+- **Risk Analysis (VaR):** Calculates **Value at Risk (95% Confidence)** by analyzing the tail distribution of simulated payoffs.
+- **Visual Data:** Plots random walk paths in real-time using performant canvas-based rendering techniques.
+
+### 3. Live Market Data Integration
+
+- **AlphaVantage API:** Connected to live market feeds to fetch real-time Spot Prices ($S_0$) for tickers (e.g., AAPL, NVDA, IBM).
+- **Automated Parameterization:** Eliminates manual data entry by auto-populating model inputs based on live market conditions.
+
+### 4. Portfolio Rebalancing Engine
+
+- **Drift Detection:** Automatically calculates deviation between _Current Holdings_ and _Target Allocation_.
+- **Order Generation:** Programmatically generates a precise "Buy/Sell" action plan to restore target weights with minimal turnover.
+
+---
+
+## 🛠 Technical Architecture
+
+This project was engineered with a focus on **Type Safety**, **Mathematical Accuracy**, and **UI/UX Polish**.
+
+- **Framework:** [Next.js 14](https://nextjs.org/) (App Router) for server-optimized rendering.
+- **Language:** [TypeScript](https://www.typescriptlang.org/) for strict type checking of financial data structures.
+- **Styling:** [Tailwind CSS](https://tailwindcss.com/) with a custom "Financial Terminal" dark mode aesthetic (Slate/Emerald/Cyan).
+- **Input Logic:** Custom `DualInput` components that handle precise decimal inputs alongside gesture-based sliders for sensitivity analysis.
+
+---
+
+## 🧮 Mathematical Implementation
+
+QuantDash implements core quantitative finance models from scratch in pure TypeScript to demonstrate a deep understanding of the underlying mathematics.
+
+### 1. Black-Scholes Model
+
+To ensure performance without heavy scientific libraries (like SciPy), the application uses the **Abramowitz and Stegun** approximation for the Standard Normal Cumulative Distribution Function (CDF):
+
+```typescript
+function normalCDF(x: number): number {
+  const t = 1 / (1 + 0.2316419 * Math.abs(x));
+  const d = 0.3989423 * Math.exp((-x * x) / 2);
+  // ... polynomial approximation ...
+}
 ```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

@@ -65,3 +65,23 @@ function normalCDF(x: number): number {
   // ... polynomial approximation ...
 }
 ```
+
+## ✅ Testing & Verification
+
+Financial software requires rigorous validation. QuantDash includes a comprehensive **Jest** test suite to ensure algorithmic accuracy and economic consistency.
+
+### Unit Tests
+The core math engine (`utils/finance.ts`) is isolated and tested against known benchmarks.
+* **Benchmark Verification:** Option prices are validated against standard industry calculators to within 4 decimal places.
+* **Edge Case Handling:** Deep Out-of-the-Money (OTM) options are verified to approach zero value correctly.
+
+### Financial Consistency (Put-Call Parity)
+The system programmatically enforces the fundamental **Put-Call Parity** relationship in its test suite:
+
+$$C - P = S - K \cdot e^{-rT}$$
+
+This ensures that the Call and Put pricing logic remains economically consistent with the underlying asset and risk-free rate at all times.
+
+**Run the test suite:**
+```bash
+npm test

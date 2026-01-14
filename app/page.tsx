@@ -518,7 +518,7 @@ export default function QuantDash() {
               </button>
             ))}
             <a 
-                href="https://github.com/saimongh/EMT-Practical-Exam-Simulator/tree/main" 
+                href="https://github.com/saimongh/EMT-Practical-Exam-Simulator/tree/main#readme" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 px-6 py-2 rounded-full text-xs font-medium tracking-wide text-white/40 hover:text-white hover:bg-white/5 border border-transparent transition-all duration-300"

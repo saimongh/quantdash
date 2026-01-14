@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { TrendingUp, DollarSign, Activity, Plus, Trash2, TrendingDown, BarChart3, Target, Search, Loader2, AlertTriangle, Layers, Zap, CheckCircle2 } from 'lucide-react';
+import { TrendingUp, DollarSign, Activity, Plus, Trash2, TrendingDown, BarChart3, Target, Search, Loader2, AlertTriangle, Layers, Zap, CheckCircle2, Github } from 'lucide-react';
 import { calculateBlackScholes } from '../utils/finance';
 
 // ============================================================================
@@ -517,6 +517,16 @@ export default function QuantDash() {
                 {tab.label}
               </button>
             ))}
+            <a 
+                href="https://github.com/saimongh/EMT-Practical-Exam-Simulator/tree/main" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-6 py-2 rounded-full text-xs font-medium tracking-wide text-white/40 hover:text-white hover:bg-white/5 border border-transparent transition-all duration-300"
+              >
+                <Github size={14} />
+                Source Code
+              </a>
+            
           </div>
         </div>
       </nav>
